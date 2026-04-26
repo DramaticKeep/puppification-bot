@@ -25,9 +25,10 @@ export interface ActionGrammar {
   /**
    * Probability that an action slot using this palette actually emits a
    * phrase. Lets quiet palettes (e.g. `neutral`) emit actions sparingly
-   * and expressive ones (e.g. `highPositive`) emit them often. When this
-   * gate fails, `composeAction` returns `null` and the translator skips
-   * the slot.
+   * and expressive ones (e.g. `highPositive`) emit them often. The
+   * translator blends these by mix weights via `blendActionProbability`
+   * and rolls per slot before calling `composeAction`; the composer
+   * itself never inspects this field.
    */
   actionProbability: number;
 }
@@ -328,7 +329,10 @@ export function blendActionProbability(
  *
  * `shape` toggles whether objects and modifiers are emitted at all. With
  * `includeObjects: false`, intransitive verbs are preferred when available
- * and otherwise a transitive verb is emitted alone (no object).
+ * and otherwise a transitive verb is emitted alone (no object). Verbs that
+ * end in ` at` (e.g. `paws at`) have the orphan preposition stripped in
+ * the verb-alone path so the body reads naturally (`*paws*`, not
+ * `*paws at*`).
  *
  * Always returns a `*...*` phrase. The decision to emit at all (per
  * `actionProbability`) lives in the translator; see

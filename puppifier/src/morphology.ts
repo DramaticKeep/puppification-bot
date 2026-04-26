@@ -108,12 +108,14 @@ function clamp(x: number, lo: number, hi: number): number {
  * Compose all morphology ops on `base`. Each op fires probabilistically
  * with `intensity in [0, 1]` modulating most knobs. Order:
  *
- * 1. consonant doubling (e.g. `ruff` -> `rrruff`)
- * 2. vowel stretching (e.g. `rrruff` -> `rrruuuuff`)
- * 3. token repetition (e.g. `rrruuuuff` -> `rrruuuuff rrruuuuff`)
- * 4. casing: full uppercase OR first-letter capitalization (mutually exclusive)
- *
- * The casing step is done last so it applies to the whole repeated token.
+ * 1. decide repeat count (e.g. `bark` -> emit 2 instances)
+ * 2. for **each** instance, independently roll consonant doubling
+ *    (`bark` -> `bbark`) and vowel stretching (`bbark` -> `bbaaark`),
+ *    so repeats look like `bbaaark baark` rather than `bbaaark bbaaark`
+ * 3. join instances with single spaces
+ * 4. casing: full uppercase OR first-letter capitalization (mutually
+ *    exclusive). Casing applies to the whole join so a shouted
+ *    repetition looks like `BBAAARK BAARK`, not `BBAAARK baark`.
  */
 export function morph(
   base: string,
@@ -122,22 +124,35 @@ export function morph(
   probs: MorphologyProbs,
 ): string {
   const i = clamp(intensity, 0, 1);
-  let out = base;
 
   const pDouble = clamp(probs.doubleLeadBase + probs.doubleLeadIntensityScale * i, 0, 1);
-  if (rng.bool(pDouble)) {
-    out = doubleLead(out, rng.int(probs.leadDoubleMin, probs.leadDoubleMax));
-  }
-
   const pStretch = clamp(probs.stretchVowelBase + probs.stretchVowelIntensityScale * i, 0, 1);
-  if (rng.bool(pStretch)) {
-    out = stretchVowel(out, rng.int(probs.vowelStretchMin, probs.vowelStretchMax), rng);
+  const pRepeat = clamp(probs.repeatBase + probs.repeatIntensityScale * i, 0, 1);
+
+  // Decide the repeat count up front; each instance is then jittered
+  // independently so duplicates aren't carbon copies of one another.
+  const repeatCount = rng.bool(pRepeat)
+    ? rng.int(probs.repeatMin, probs.repeatMax)
+    : 0;
+  const totalInstances = 1 + Math.max(0, repeatCount);
+
+  const instances: string[] = [];
+  for (let n = 0; n < totalInstances; n++) {
+    let inst = base;
+    if (rng.bool(pDouble)) {
+      inst = doubleLead(inst, rng.int(probs.leadDoubleMin, probs.leadDoubleMax));
+    }
+    if (rng.bool(pStretch)) {
+      inst = stretchVowel(
+        inst,
+        rng.int(probs.vowelStretchMin, probs.vowelStretchMax),
+        rng,
+      );
+    }
+    instances.push(inst);
   }
 
-  const pRepeat = clamp(probs.repeatBase + probs.repeatIntensityScale * i, 0, 1);
-  if (rng.bool(pRepeat)) {
-    out = repeatToken(out, rng.int(probs.repeatMin, probs.repeatMax));
-  }
+  let out = instances.join(' ');
 
   const pUpper = clamp(probs.uppercaseBase + probs.uppercaseIntensityScale * i, 0, 1);
   if (rng.bool(pUpper)) {

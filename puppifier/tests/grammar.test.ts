@@ -192,7 +192,13 @@ describe('composeAction', () => {
           intransitiveVerbs: [],
         },
       };
-      const verbs = grammars.neutral.verbs.map((v) => v.value);
+      // Verbs like "paws at" become orphan prepositions when emitted
+      // alone, so the verb-alone path strips a trailing " at".
+      const acceptableBodies = new Set(
+        grammars.neutral.verbs.map((v) =>
+          v.value.endsWith(' at') ? v.value.slice(0, -3) : v.value,
+        ),
+      );
       for (let i = 0; i < 20; i++) {
         const out = composeAction(
           neutralMix(),
@@ -202,7 +208,14 @@ describe('composeAction', () => {
           { includeObjects: false, includeModifiers: false },
         );
         const body = out.slice(1, -1);
-        expect(verbs).to.include(body);
+        expect(acceptableBodies).to.include(
+          body,
+          `expected verb-alone body, got "${body}"`,
+        );
+        expect(body).to.not.match(
+          / at$/,
+          `verb-alone body should drop a trailing " at": "${body}"`,
+        );
       }
     });
 
