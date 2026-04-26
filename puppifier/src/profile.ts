@@ -46,6 +46,14 @@ export interface Profile {
    * `includeModifiers: false` to forbid trailing adverbs.
    */
   actionShape: ActionShapeOptions;
+  /**
+   * When `true` (the default), all `*...*` action phrases are relocated
+   * to the end of each sentence regardless of where the chosen template
+   * places them. Sound clusters keep their relative order; actions keep
+   * their relative order. Set to `false` to honor the template's slot
+   * positions (allowing openers and mid-sentence actions).
+   */
+  actionsAtEndOnly: boolean;
 }
 
 const defaultMorphology: MorphologyProbs = {
@@ -93,4 +101,5 @@ export const defaultProfile: Profile = {
   density: defaultDensity,
   templates: TEMPLATES,
   actionShape: DEFAULT_ACTION_SHAPE,
+  actionsAtEndOnly: true,
 };

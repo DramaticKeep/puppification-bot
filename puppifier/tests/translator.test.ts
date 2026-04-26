@@ -118,12 +118,31 @@ describe('translateSentence', () => {
 
   it('trailing "!" forces last sound cluster to uppercase', () => {
     const out = translateSentence('I am SO excited!', happyTone, ctxAt(2));
-    expect(out.endsWith('!')).to.equal(true);
+    // The "!" lands on a sound token (never directly after a closing '*').
+    expect(out.includes('!')).to.equal(true, `expected "!" in: ${out}`);
+    expect(/\*\!/.test(out)).to.equal(
+      false,
+      `expected "!" on a sound token, not after an action: ${out}`,
+    );
+    // And whichever sound token carries the "!" is fully uppercased.
+    const bang = out.match(/(\S+)!/);
+    expect(bang).to.not.equal(null, `expected a "!"-bearing token in: ${out}`);
+    const token = bang![1]!;
+    const letters = token.replace(/[^A-Za-z]/g, '');
+    expect(letters).to.equal(
+      letters.toUpperCase(),
+      `expected uppercase "!"-bearing token, got "${token}" in: ${out}`,
+    );
   });
 
   it('trailing "..." is preserved', () => {
     const out = translateSentence('I am tired...', sadTone, ctxAt(3));
-    expect(out).to.match(/\.\.\.\s*$/);
+    // "..." appears, on a sound token rather than after a closing '*'.
+    expect(out.includes('...')).to.equal(true, `expected "..." in: ${out}`);
+    expect(/\*\.\.\./.test(out)).to.equal(
+      false,
+      `expected "..." on a sound token, not after an action: ${out}`,
+    );
   });
 
   it('easter egg "i love you" always ends with *licks your face*', () => {
@@ -157,6 +176,74 @@ describe('translateSentence', () => {
       const out = translateSentence('Hello there.', tone, ctxAt(i));
       expect(out.length).to.be.greaterThan(0);
     }
+  });
+
+  it('actionsAtEndOnly (default) keeps every action after every sound', () => {
+    // Force a template that places an action mid-sentence, then verify
+    // the relocation still pushes it past the sounds in the final output.
+    const profile = {
+      ...defaultProfile,
+      density: { ...defaultProfile.density, actionsPerSentence: 5 },
+      templates: [
+        { slots: ['action', 'sound', 'action', 'sound'] as const, weight: 1 },
+      ],
+    };
+    for (let seed = 0; seed < 30; seed++) {
+      const { random } = createRandom(seed);
+      const ctx = {
+        rng: random,
+        profile,
+        buffers: makeRecentBuffers(profile),
+      };
+      const out = translateSentence('Hello there.', happyTone, ctx);
+      const tokens = out.match(/\*[^*]+\*|[^\s*]+/g) ?? [];
+      let seenAction = false;
+      for (const tok of tokens) {
+        if (tok.startsWith('*')) {
+          seenAction = true;
+        } else {
+          // A sound token after an action would violate the contract.
+          expect(seenAction).to.equal(
+            false,
+            `seed=${seed} sound "${tok}" appeared after an action in: ${out}`,
+          );
+        }
+      }
+    }
+  });
+
+  it('actionsAtEndOnly=false honors template positions (mid-sentence actions allowed)', () => {
+    const profile = {
+      ...defaultProfile,
+      density: { ...defaultProfile.density, actionsPerSentence: 5 },
+      templates: [
+        { slots: ['sound', 'action', 'sound'] as const, weight: 1 },
+      ],
+      actionsAtEndOnly: false,
+    };
+    let sawMidAction = 0;
+    for (let seed = 0; seed < 30; seed++) {
+      const { random } = createRandom(seed);
+      const ctx = {
+        rng: random,
+        profile,
+        buffers: makeRecentBuffers(profile),
+      };
+      const out = translateSentence('Hello there.', happyTone, ctx);
+      const tokens = out.match(/\*[^*]+\*|[^\s*]+/g) ?? [];
+      // Look for the pattern: action followed by a sound (impossible
+      // when actionsAtEndOnly is true).
+      for (let i = 0; i < tokens.length - 1; i++) {
+        if (tokens[i]!.startsWith('*') && !tokens[i + 1]!.startsWith('*')) {
+          sawMidAction++;
+          break;
+        }
+      }
+    }
+    expect(sawMidAction).to.be.greaterThan(
+      0,
+      'expected at least one mid-sentence action when actionsAtEndOnly=false',
+    );
   });
 
   it('contains at least one *...* action phrase given high intensity over many seeds', () => {

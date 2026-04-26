@@ -130,6 +130,23 @@ const minimalist: Profile = {
 };
 ```
 
+#### `actionsAtEndOnly`
+
+`actionsAtEndOnly` (default `true`) forces every `*...*` action phrase to the
+end of its sentence regardless of which slot the template chose. Sound
+clusters keep their relative order; actions keep their relative order.
+Punctuation still lands on the last sound, so output looks like
+`ruff bark WOOF! *wags tail*` rather than `*wags tail* ruff bark WOOF!`.
+Set to `false` to honor template slot positions (allowing openers and
+mid-sentence actions).
+
+```ts
+const templated: Profile = {
+  ...defaultProfile,
+  actionsAtEndOnly: false,
+};
+```
+
 ## How it works
 
 1. **Classify** the input via `emotion-classifier`, getting top-K tones for the phrase and each sentence.

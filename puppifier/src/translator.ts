@@ -281,6 +281,19 @@ export function translateSentence(
     parts.unshift('*ears perk up*');
   }
 
+  // Optionally force all `*...*` action phrases to trail the sounds.
+  // Done before punctuation so `!` / `?` still land on the last sound
+  // (which now sits just before the action group).
+  if (ctx.profile.actionsAtEndOnly) {
+    const sounds: string[] = [];
+    const actions: string[] = [];
+    for (const p of parts) {
+      (p.startsWith('*') ? actions : sounds).push(p);
+    }
+    parts.length = 0;
+    parts.push(...sounds, ...actions);
+  }
+
   // Punctuation + caps preservation from the source sentence.
   const punct = trailingPunctuation(trimmed);
   if (punct === '!') {
