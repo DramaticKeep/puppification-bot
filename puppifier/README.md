@@ -92,8 +92,9 @@ interface PuppifyOptions {
 ### `Profile`
 
 A `Profile` bundles every personality-tunable knob: palettes, action grammars,
-morphology probabilities, density, and sentence templates. The exported
-`defaultProfile` is the shipped personality; build derived profiles by spreading:
+morphology probabilities, density, sentence templates, and action shape. The
+exported `defaultProfile` is the shipped personality; build derived profiles
+by spreading:
 
 ```ts
 import { defaultProfile, puppify, type Profile } from 'puppifier';
@@ -111,6 +112,22 @@ await puppify('I am so happy! I got a promotion!', {
   seed: 42,
   profile: chillPup,
 });
+```
+
+#### `actionShape`
+
+`actionShape: { includeObjects: boolean; includeModifiers: boolean }` controls
+the structural pieces of an action phrase (`*verb object modifier*`). With
+`includeObjects: false`, intransitive forms are used when available
+(`*spins in a circle*` instead of `*wags tail*`); with
+`includeModifiers: false`, trailing adverbs like `vigorously` are never
+appended.
+
+```ts
+const minimalist: Profile = {
+  ...defaultProfile,
+  actionShape: { includeObjects: false, includeModifiers: false },
+};
 ```
 
 ## How it works

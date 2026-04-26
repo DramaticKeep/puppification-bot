@@ -13,6 +13,8 @@ import {
 } from './translator.js';
 
 export type { Classifier, PhraseEmotionClassification, ToneScore };
+export { DEFAULT_ACTION_SHAPE } from './grammar.js';
+export type { ActionShapeOptions } from './grammar.js';
 export { defaultProfile } from './profile.js';
 export type { Profile } from './profile.js';
 

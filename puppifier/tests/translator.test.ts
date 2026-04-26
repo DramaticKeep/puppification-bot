@@ -50,17 +50,56 @@ describe('translateSentence', () => {
 
   it('full-uppercase source yields uppercase sound tokens (but lowercase actions)', () => {
     const out = translateSentence('I AM SO HAPPY!', happyTone, ctxAt(7));
-    const tokens = out.split(' ');
-    for (const t of tokens) {
-      if (t.startsWith('*')) continue;
-      const letters = t.replace(/[^A-Za-z]/g, '');
-      if (letters.length > 0) {
-        expect(letters).to.equal(
-          letters.toUpperCase(),
-          `expected uppercase sound token, got "${t}"`,
-        );
-      }
+    // Parse out *...* action regions and sound regions independently.
+    const actionRegex = /\*[^*]+\*/g;
+    const actions = out.match(actionRegex) ?? [];
+    const soundRegion = out.replace(actionRegex, ' ');
+    const soundLetters = soundRegion.replace(/[^A-Za-z]/g, '');
+    if (soundLetters.length > 0) {
+      expect(soundLetters).to.equal(
+        soundLetters.toUpperCase(),
+        `expected uppercase sound region, got "${soundRegion}" in: ${out}`,
+      );
     }
+    for (const action of actions) {
+      const inner = action.slice(1, -1);
+      // No uppercase letters should leak into action bodies.
+      expect(inner).to.equal(
+        inner.toLowerCase(),
+        `expected fully lowercase action body, got "${action}" in: ${out}`,
+      );
+    }
+  });
+
+  it('all-caps source does NOT uppercase words inside multi-word actions', () => {
+    // Force a multi-word intransitive action ("stomps off") on every call,
+    // a template that always emits an action, and an all-caps source.
+    const profile = {
+      ...defaultProfile,
+      grammars: {
+        ...defaultProfile.grammars,
+        highNegative: {
+          ...defaultProfile.grammars.highNegative,
+          intransitiveVerbs: [{ value: 'stomps off', weight: 1 }],
+          intransitiveProbability: 1,
+          modifierProbability: 0,
+        },
+      },
+      density: {
+        ...defaultProfile.density,
+        actionsPerSentence: 5,
+      },
+      templates: [{ slots: ['sound', 'action', 'sound'] as const, weight: 1 }],
+    };
+    const { random } = createRandom(1);
+    const ctx = {
+      rng: random,
+      profile,
+      buffers: makeRecentBuffers(profile),
+    };
+    const out = translateSentence('STOP IT!', angryTone, ctx);
+    expect(out).to.include('*stomps off*');
+    expect(out).to.not.match(/\*[^*]*[A-Z][^*]*\*/);
   });
 
   it('trailing "?" is preserved on a sound token (and a head-tilt action may follow)', () => {

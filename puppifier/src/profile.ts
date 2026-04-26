@@ -1,5 +1,5 @@
-import type { ActionGrammar } from './grammar.js';
-import { GRAMMARS } from './grammar.js';
+import type { ActionGrammar, ActionShapeOptions } from './grammar.js';
+import { DEFAULT_ACTION_SHAPE, GRAMMARS } from './grammar.js';
 import type { MorphologyProbs } from './morphology.js';
 import type { Palette } from './palettes.js';
 import { PALETTES } from './palettes.js';
@@ -39,6 +39,13 @@ export interface Profile {
   morphology: MorphologyProbs;
   density: DensityProfile;
   templates: Template[];
+  /**
+   * Toggles for the structural pieces of an action phrase
+   * (`*verb object modifier*`). Set `includeObjects: false` for a
+   * minimalist personality that only uses intransitive forms; set
+   * `includeModifiers: false` to forbid trailing adverbs.
+   */
+  actionShape: ActionShapeOptions;
 }
 
 const defaultMorphology: MorphologyProbs = {
@@ -85,4 +92,5 @@ export const defaultProfile: Profile = {
   morphology: defaultMorphology,
   density: defaultDensity,
   templates: TEMPLATES,
+  actionShape: DEFAULT_ACTION_SHAPE,
 };

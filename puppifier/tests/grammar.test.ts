@@ -1,5 +1,10 @@
 import { expect } from 'chai';
-import { composeAction, GRAMMARS, pickPaletteKey } from '../src/grammar.ts';
+import {
+  composeAction,
+  DEFAULT_ACTION_SHAPE,
+  GRAMMARS,
+  pickPaletteKey,
+} from '../src/grammar.ts';
 import { createRandom } from '../src/random.ts';
 import { RecentBuffer } from '../src/recent.ts';
 import type { PaletteMix } from '../src/tone.ts';
@@ -153,5 +158,99 @@ describe('composeAction', () => {
       const out = composeAction(neutralMix(), random, makeBuffers(), grammars);
       expect(out).to.match(/vigorously\*$/);
     }
+  });
+
+  describe('action shape options', () => {
+    it('omits objects when includeObjects=false (uses intransitive pool)', () => {
+      const { random } = createRandom(11);
+      // Make every transitive verb's bare form unmistakable (no overlap
+      // with intransitive verb prefixes), and force modifiers off.
+      const intransitives = GRAMMARS.highPositive.intransitiveVerbs!.map(
+        (v) => v.value,
+      );
+      for (let i = 0; i < 30; i++) {
+        const out = composeAction(
+          highPositiveMix(),
+          random,
+          makeBuffers(),
+          GRAMMARS,
+          { includeObjects: false, includeModifiers: false },
+        );
+        const body = out.slice(1, -1);
+        // Body must be exactly one of the intransitive forms.
+        expect(intransitives).to.include(body);
+      }
+    });
+
+    it('emits a verb alone when includeObjects=false and no intransitive pool exists', () => {
+      const { random } = createRandom(13);
+      const grammars = {
+        ...GRAMMARS,
+        neutral: {
+          ...GRAMMARS.neutral,
+          intransitiveVerbs: [],
+        },
+      };
+      const verbs = grammars.neutral.verbs.map((v) => v.value);
+      for (let i = 0; i < 20; i++) {
+        const out = composeAction(
+          neutralMix(),
+          random,
+          makeBuffers(),
+          grammars,
+          { includeObjects: false, includeModifiers: false },
+        );
+        const body = out.slice(1, -1);
+        expect(verbs).to.include(body);
+      }
+    });
+
+    it('omits modifiers when includeModifiers=false even at modifierProbability=1', () => {
+      const { random } = createRandom(17);
+      const grammars = {
+        ...GRAMMARS,
+        neutral: {
+          ...GRAMMARS.neutral,
+          intransitiveProbability: 0,
+          modifierProbability: 1,
+          modifiers: [{ value: 'vigorously', weight: 1 }],
+        },
+      };
+      for (let i = 0; i < 10; i++) {
+        const out = composeAction(
+          neutralMix(),
+          random,
+          makeBuffers(),
+          grammars,
+          { includeObjects: true, includeModifiers: false },
+        );
+        expect(out).to.not.match(/vigorously/);
+      }
+    });
+
+    it('default shape includes both objects and modifiers', () => {
+      // Just a smoke test: with the default shape and a modifier-probability=1
+      // grammar, the modifier always appears.
+      const { random } = createRandom(19);
+      const grammars = {
+        ...GRAMMARS,
+        neutral: {
+          ...GRAMMARS.neutral,
+          intransitiveProbability: 0,
+          modifierProbability: 1,
+          modifiers: [{ value: 'vigorously', weight: 1 }],
+        },
+      };
+      for (let i = 0; i < 5; i++) {
+        const out = composeAction(
+          neutralMix(),
+          random,
+          makeBuffers(),
+          grammars,
+          DEFAULT_ACTION_SHAPE,
+        );
+        expect(out).to.match(/vigorously\*$/);
+      }
+    });
   });
 });

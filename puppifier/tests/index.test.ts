@@ -404,4 +404,44 @@ describe('custom profile option', () => {
     });
     expect(a.text).to.not.equal(b.text);
   });
+
+  it('Profile.actionShape disables objects and modifiers end-to-end', () => {
+    // Force a single-action template at a high enough intensity to clear
+    // any minIntensity gate, with intransitive-only forms easy to spot.
+    const intransitiveOnly: Profile = {
+      ...defaultProfile,
+      density: {
+        ...defaultProfile.density,
+        actionsPerSentence: 5,
+        soundsPerWord: 0,
+      },
+      templates: [{ slots: ['action'], weight: 1 }],
+      actionShape: { includeObjects: false, includeModifiers: false },
+    };
+
+    // Run across many seeds; every action body must be one of the
+    // intransitive forms from one of the palette grammars.
+    const allIntransitives = new Set<string>();
+    for (const grammar of Object.values(defaultProfile.grammars)) {
+      for (const v of grammar.intransitiveVerbs ?? []) {
+        allIntransitives.add(v.value);
+      }
+    }
+
+    for (let seed = 0; seed < 20; seed++) {
+      const r = puppify_classification(happyClassification, {
+        seed,
+        profile: intransitiveOnly,
+      });
+      const actions = r.text.match(/\*[^*]+\*/g) ?? [];
+      expect(actions.length).to.be.greaterThan(0);
+      for (const a of actions) {
+        const body = a.slice(1, -1);
+        expect(allIntransitives).to.include(
+          body,
+          `seed=${seed} expected pure intransitive, got "${body}"`,
+        );
+      }
+    }
+  });
 });

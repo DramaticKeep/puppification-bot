@@ -24,6 +24,26 @@ export interface ActionGrammar {
   intransitiveProbability: number;
 }
 
+/**
+ * Toggles for the structural pieces of an action phrase. When a piece is
+ * disabled, `composeAction` skips it entirely regardless of the grammar's
+ * own probabilities.
+ */
+export interface ActionShapeOptions {
+  /**
+   * If `false`, never emit a `verb object` form. The intransitive pool is
+   * used when available; otherwise a verb is emitted alone (no object).
+   */
+  includeObjects: boolean;
+  /** If `false`, never append a modifier. */
+  includeModifiers: boolean;
+}
+
+export const DEFAULT_ACTION_SHAPE: ActionShapeOptions = {
+  includeObjects: true,
+  includeModifiers: true,
+};
+
 const transitiveCommon: WeightedItem<string>[] = [
   { value: 'scratches', weight: 3 },
   { value: 'sniffs', weight: 3 },
@@ -264,20 +284,29 @@ function weightsWithDedup<T>(
  *
  * Recent buffers zero out the weight of recently-used verbs and verb+object
  * pairs to push the sampler toward fresh combinations.
+ *
+ * `shape` toggles whether objects and modifiers are emitted at all. With
+ * `includeObjects: false`, intransitive verbs are preferred when available
+ * and otherwise a transitive verb is emitted alone (no object).
  */
 export function composeAction(
   mix: PaletteMix,
   rng: Random,
   recent: { verbs: RecentBuffer<string>; verbObjects: RecentBuffer<string> },
   grammars: Record<PaletteKey, ActionGrammar>,
+  shape: ActionShapeOptions = DEFAULT_ACTION_SHAPE,
 ): string {
   const key = pickPaletteKey(mix, rng);
   const grammar = grammars[key];
 
-  const useIntransitive =
-    !!grammar.intransitiveVerbs &&
-    grammar.intransitiveVerbs.length > 0 &&
-    rng.bool(grammar.intransitiveProbability);
+  const hasIntransitive =
+    !!grammar.intransitiveVerbs && grammar.intransitiveVerbs.length > 0;
+
+  // When objects are disabled, force the intransitive path (when
+  // available). Otherwise, sample by the grammar's own probability.
+  const useIntransitive = !shape.includeObjects
+    ? hasIntransitive
+    : hasIntransitive && rng.bool(grammar.intransitiveProbability);
 
   let body: string;
   let verb: string;
@@ -288,6 +317,11 @@ export function composeAction(
       recent.verbs,
     );
     verb = rng.pickWeighted(values, weights);
+    body = verb;
+  } else if (!shape.includeObjects) {
+    // No intransitive pool to fall back on; emit the verb alone.
+    const verbDedup = weightsWithDedup(grammar.verbs, recent.verbs);
+    verb = rng.pickWeighted(verbDedup.values, verbDedup.weights);
     body = verb;
   } else {
     const verbDedup = weightsWithDedup(grammar.verbs, recent.verbs);
@@ -309,6 +343,7 @@ export function composeAction(
   recent.verbs.push(verb);
 
   if (
+    shape.includeModifiers &&
     grammar.modifiers &&
     grammar.modifiers.length > 0 &&
     rng.bool(grammar.modifierProbability)

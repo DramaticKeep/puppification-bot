@@ -246,6 +246,7 @@ export function translateSentence(
             ctx.rng,
             { verbs: ctx.buffers.verbs, verbObjects: ctx.buffers.verbObjects },
             ctx.profile.grammars,
+            ctx.profile.actionShape,
           );
           parts.push(action);
           actionsEmitted++;
@@ -264,6 +265,7 @@ export function translateSentence(
             ctx.rng,
             { verbs: ctx.buffers.verbs, verbObjects: ctx.buffers.verbObjects },
             ctx.profile.grammars,
+            ctx.profile.actionShape,
           );
           parts.push(action);
           actionsEmitted++;
@@ -294,6 +296,7 @@ export function translateSentence(
           ctx.rng,
           { verbs: ctx.buffers.verbs, verbObjects: ctx.buffers.verbObjects },
           ctx.profile.grammars,
+          ctx.profile.actionShape,
         );
         parts.push(tilt);
       }
@@ -308,16 +311,18 @@ export function translateSentence(
     }
   }
 
-  let out = parts.filter((p) => p.length > 0).join(' ');
+  let finalParts = parts.filter((p) => p.length > 0);
 
   if (isAllUppercase(trimmed)) {
-    // Uppercase all sound tokens but leave action *...* phrases lowercase
-    // so they read naturally.
-    out = out
-      .split(' ')
-      .map((tok) => (tok.startsWith('*') ? tok : tok.toUpperCase()))
-      .join(' ');
+    // Uppercase sound clusters but leave action *...* phrases lowercase so
+    // they read naturally. We map across `finalParts` (pre-join) rather
+    // than the joined string because actions can contain internal
+    // whitespace (e.g. "*stomps off*"); a naive space-split would miss
+    // the leading "*" on inner tokens like "off*".
+    finalParts = finalParts.map((p) =>
+      p.startsWith('*') ? p : p.toUpperCase(),
+    );
   }
 
-  return out;
+  return finalParts.join(' ');
 }
