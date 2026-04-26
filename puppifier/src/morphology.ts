@@ -38,12 +38,49 @@ export interface MorphologyProbs {
 const VOWELS = new Set(['a', 'e', 'i', 'o', 'u']);
 
 /**
+ * Consonants that can be sustained when written multiple times in a row
+ * — liquids (`r`, `l`), nasals (`m`, `n`), and fricatives (`f`, `s`, `v`,
+ * `z`, `h`). Stops (`b`, `d`, `g`, `k`, `p`, `t`, …) and the semivowels
+ * `w`/`y` read as a stutter when doubled (`bbbark` → "buh-buh-bark"), so
+ * we exclude them from the leading-double op.
+ */
+const SUSTAINABLE_LEAD_CONSONANTS = new Set([
+  'r', 'l', 'm', 'n', 'f', 's', 'v', 'z', 'h',
+]);
+
+/**
+ * True for a vowel run that is a single, lone `e` at the very end of
+ * `base` AND has at least one earlier vowel run to stretch instead.
+ *
+ * Catches the silent terminal `e` in words like `whine`, `bake`, `hide`
+ * so we stretch the meaningful vowel (`whiiine`) instead of piling
+ * inaudible characters onto a silent letter (`whineee`).
+ *
+ * Words like `bee`, `tree` (run of `ee`, length ≥ 2) and `the`, `e`
+ * (no earlier vowel run) are intentionally not caught.
+ */
+function isSilentTerminalE(
+  run: { start: number; end: number },
+  base: string,
+  hasEarlierVowel: boolean,
+): boolean {
+  return (
+    hasEarlierVowel &&
+    run.end === base.length &&
+    run.end - run.start === 1 &&
+    base[run.start]!.toLowerCase() === 'e'
+  );
+}
+
+/**
  * Stretch a vowel inside `base` by inserting `count` extra copies of the
  * picked vowel. If `base` contains no vowels, returns it unchanged.
  *
- * The vowel chosen is the longest run of consecutive vowels; we extend
- * the run rather than picking arbitrarily so 'ruff' stretches to
- * 'ruuuff', not 'rufff'.
+ * The vowel chosen is one of the consecutive-vowel runs; we extend the
+ * run rather than picking arbitrarily so `ruff` stretches to `ruuuff`,
+ * not `rufff`. Silent terminal `e` runs (as in `whine`, `bake`) are
+ * skipped when an earlier vowel run is available, so we get `whiiine`
+ * instead of `whineee`.
  */
 export function stretchVowel(base: string, count: number, rng: Random): string {
   if (count <= 0 || base.length === 0) return base;
@@ -61,7 +98,13 @@ export function stretchVowel(base: string, count: number, rng: Random): string {
   }
   if (runs.length === 0) return base;
 
-  const run = rng.pick(runs);
+  // Drop silent-e candidates when something else is available.
+  const candidates = runs.filter(
+    (r, idx) => !isSilentTerminalE(r, base, idx > 0),
+  );
+  const pool = candidates.length > 0 ? candidates : runs;
+
+  const run = rng.pick(pool);
   const vowelChar = base[run.end - 1]!;
   return (
     base.slice(0, run.end) +
@@ -71,13 +114,17 @@ export function stretchVowel(base: string, count: number, rng: Random): string {
 }
 
 /**
- * Double the leading consonant cluster by `count` extra copies. If the
- * base starts with a vowel, returns it unchanged.
+ * Double the leading consonant by `count` extra copies. No-op when the
+ * leading character is a vowel or a non-sustainable consonant (stops
+ * like `b`/`d`/`g`/`p`/`t`/`k` and the semivowels `w`/`y`). This keeps
+ * `ruff` → `rrruff` (sustained roll) but blocks `bark` → `bbbark`
+ * ("buh-buh-bark"), since stops don't read as emphasis when repeated.
  */
 export function doubleLead(base: string, count: number): string {
   if (count <= 0 || base.length === 0) return base;
   const first = base[0]!.toLowerCase();
   if (VOWELS.has(first)) return base;
+  if (!SUSTAINABLE_LEAD_CONSONANTS.has(first)) return base;
   return base[0]!.repeat(count) + base;
 }
 

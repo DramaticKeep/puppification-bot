@@ -36,12 +36,42 @@ describe('morphology atoms', () => {
     it('returns base unchanged when there are no vowels', () => {
       expect(stretchVowel('grr', 3, fixedRandom(0))).to.equal('grr');
     });
+
+    it('skips a silent terminal "e" and stretches the earlier vowel', () => {
+      // With or without the picker preferring the first run, the
+      // silent-e candidate must be dropped, so `whine` always becomes
+      // `whiiine`, never `whineee`.
+      for (const v of [0, 0.25, 0.5, 0.75, 0.99]) {
+        expect(stretchVowel('whine', 2, fixedRandom(v))).to.equal('whiiine');
+        expect(stretchVowel('hide', 2, fixedRandom(v))).to.equal('hiiide');
+      }
+    });
+
+    it('stretches a non-silent terminal vowel run normally', () => {
+      // `bee` ends in `ee` (length ≥ 2) so it isn't silent; `e` is the
+      // only run, so it must be the one picked. count=2 adds 2 chars.
+      expect(stretchVowel('bee', 2, fixedRandom(0))).to.equal('beeee');
+      // Single-letter `e` is the only vowel run, so we stretch it
+      // (silent-e filter only fires when a fallback exists).
+      expect(stretchVowel('the', 2, fixedRandom(0))).to.equal('theee');
+    });
   });
 
   describe('doubleLead', () => {
-    it('prepends `count` extra copies of the leading consonant', () => {
+    it('prepends `count` extra copies of a sustainable leading consonant', () => {
       expect(doubleLead('ruff', 2)).to.equal('rrruff');
-      expect(doubleLead('grr', 1)).to.equal('ggrr');
+      expect(doubleLead('snarl', 1)).to.equal('ssnarl');
+      expect(doubleLead('mrrf', 2)).to.equal('mmmrrf');
+    });
+
+    it('returns base unchanged when leading char is a stop or semivowel', () => {
+      // Stops would read as a stutter ("buh-buh-bark", "guh-guh-grr").
+      expect(doubleLead('bark', 2)).to.equal('bark');
+      expect(doubleLead('boof', 2)).to.equal('boof');
+      expect(doubleLead('grr', 2)).to.equal('grr');
+      expect(doubleLead('gnar', 2)).to.equal('gnar');
+      expect(doubleLead('woof', 2)).to.equal('woof');
+      expect(doubleLead('yip', 2)).to.equal('yip');
     });
 
     it('returns base unchanged when leading char is a vowel', () => {
