@@ -1,0 +1,324 @@
+import type { ToneScore } from 'emotion-classifier';
+import { findOverride, findTags } from './easterEggs.js';
+import { composeAction } from './grammar.js';
+import { morph } from './morphology.js';
+import type { Palette, SoundEntry } from './palettes.js';
+import type { Profile } from './profile.js';
+import type { Random } from './random.js';
+import { RecentBuffer } from './recent.js';
+import { pickTemplate } from './templates.js';
+import type { Slot, Template } from './templates.js';
+import { blendTones, PALETTE_KEYS } from './tone.js';
+import type { PaletteKey, PaletteMix } from './tone.js';
+
+export interface TranslateBuffers {
+  sounds: RecentBuffer<string>;
+  verbs: RecentBuffer<string>;
+  verbObjects: RecentBuffer<string>;
+}
+
+export interface TranslateContext {
+  seed: number;
+  rng: Random;
+  profile: Profile;
+  buffers: TranslateBuffers;
+}
+
+/** Construct a fresh set of recent-use buffers from a profile. */
+export function makeRecentBuffers(profile: Profile): TranslateBuffers {
+  const w = profile.density.windowSizes;
+  return {
+    sounds: new RecentBuffer<string>(w.sounds),
+    verbs: new RecentBuffer<string>(w.verbs),
+    verbObjects: new RecentBuffer<string>(w.verbObjects),
+  };
+}
+
+function countWords(s: string): number {
+  const m = s.trim().match(/\S+/g);
+  return m ? m.length : 0;
+}
+
+function endsWithEllipsis(s: string): boolean {
+  return /\.\.\.\s*["')\]]*\s*$/.test(s);
+}
+
+function trailingPunctuation(s: string): '!' | '?' | '...' | '.' | '' {
+  const trimmed = s.trim();
+  if (trimmed.length === 0) return '';
+  if (endsWithEllipsis(trimmed)) return '...';
+  const last = trimmed[trimmed.length - 1]!;
+  if (last === '!' || last === '?' || last === '.') return last;
+  return '';
+}
+
+function isAllUppercase(s: string): boolean {
+  const letters = s.replace(/[^A-Za-z]/g, '');
+  if (letters.length < 3) return false;
+  return letters === letters.toUpperCase();
+}
+
+/**
+ * Pick a sound from a blended palette mix.
+ *
+ * Strategy: pick a palette key by mix weight, then within that palette
+ * pick a `SoundEntry` weighted by its base weight, with recently-used
+ * base sounds zeroed out. If the chosen palette has every entry recent,
+ * we fall back to ignoring the dedup so we never deadlock.
+ */
+function pickSound(
+  mix: PaletteMix,
+  rng: Random,
+  recent: RecentBuffer<string>,
+  palettes: Record<PaletteKey, Palette>,
+  source: 'sounds' | 'interjections',
+): string {
+  const keys = PALETTE_KEYS;
+  const keyWeights = keys.map((k) => mix.weights[k]);
+  const keyTotal = keyWeights.reduce((s, w) => s + (w > 0 ? w : 0), 0);
+  const key: PaletteKey =
+    keyTotal > 0 ? rng.pickWeighted(keys, keyWeights) : 'neutral';
+
+  const palette = palettes[key];
+  let entries: SoundEntry[] | undefined =
+    source === 'interjections' ? palette.interjections : palette.sounds;
+  if (!entries || entries.length === 0) entries = palette.sounds;
+
+  const dedupedWeights = entries.map((e) =>
+    recent.has(e.base) ? 0 : e.weight,
+  );
+  const total = dedupedWeights.reduce((s, w) => s + (w > 0 ? w : 0), 0);
+  const weights = total > 0 ? dedupedWeights : entries.map((e) => e.weight);
+
+  const chosen = rng.pickWeighted(
+    entries.map((e) => e.base),
+    weights,
+  );
+  recent.push(chosen);
+  return chosen;
+}
+
+interface SoundClusterResult {
+  cluster: string;
+  bases: string[];
+}
+
+/** Generate a single sound cluster of `count` morphed sound tokens. */
+function generateSoundCluster(
+  count: number,
+  mix: PaletteMix,
+  ctx: TranslateContext,
+  source: 'sounds' | 'interjections',
+): SoundClusterResult {
+  const { rng, profile, buffers } = ctx;
+  const tokens: string[] = [];
+  const bases: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const base = pickSound(mix, rng, buffers.sounds, profile.palettes, source);
+    bases.push(base);
+    const token = morph(base, mix.intensity, rng, profile.morphology);
+    tokens.push(token);
+  }
+  return { cluster: tokens.join(' '), bases };
+}
+
+function clusterSizesForSlots(
+  template: Template,
+  totalSounds: number,
+): number[] {
+  const soundSlots = template.slots.filter((s) => s === 'sound').length;
+  if (soundSlots === 0) return [];
+  const base = Math.floor(totalSounds / soundSlots);
+  const remainder = totalSounds - base * soundSlots;
+  const sizes: number[] = [];
+  for (let i = 0; i < soundSlots; i++) {
+    sizes.push(Math.max(1, base + (i < remainder ? 1 : 0)));
+  }
+  return sizes;
+}
+
+function jittered(
+  expected: number,
+  jitter: number,
+  rng: Random,
+  min: number,
+  max: number,
+): number {
+  const offset = (rng.next() * 2 - 1) * jitter;
+  const raw = Math.round(expected + offset);
+  return Math.min(max, Math.max(min, raw));
+}
+
+function uppercaseLastCluster(parts: string[]): string[] {
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const p = parts[i]!;
+    if (p.startsWith('*')) continue; // skip action phrases
+    parts[i] = p.toUpperCase();
+    break;
+  }
+  return parts;
+}
+
+function appendPunctuationToLastSound(
+  parts: string[],
+  punct: string,
+): string[] {
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const p = parts[i]!;
+    if (p.startsWith('*')) continue;
+    parts[i] = p + punct;
+    return parts;
+  }
+  if (parts.length > 0) parts[parts.length - 1] = parts[parts.length - 1] + punct;
+  return parts;
+}
+
+function hasOpenerAction(parts: string[]): boolean {
+  return parts.length > 0 && parts[0]!.startsWith('*');
+}
+
+/**
+ * Translate a single sentence into a dog-speech string. See the plan's
+ * "translator algorithm" section for the full step-by-step.
+ */
+export function translateSentence(
+  sentence: string,
+  tone: readonly ToneScore[],
+  ctx: TranslateContext,
+): string {
+  const trimmed = sentence.trim();
+  if (trimmed.length === 0) return '';
+
+  const mix = blendTones(tone);
+
+  const override = findOverride(trimmed);
+  if (override?.render) {
+    return override.render({ rng: ctx.rng, mix });
+  }
+
+  const tags = findTags(trimmed);
+  const wantsEarsPerk = tags.some((t) => t.tag === 'earsPerk');
+
+  const template = pickTemplate(mix.intensity, ctx.rng, ctx.profile.templates);
+  const density = ctx.profile.density;
+
+  const wordCount = countWords(trimmed);
+  const expectedSounds = Math.max(
+    1,
+    wordCount * density.soundsPerWord + (mix.intensity > 0 ? 0 : 0),
+  );
+  const totalSounds = jittered(
+    expectedSounds,
+    density.jitter,
+    ctx.rng,
+    1,
+    density.maxSoundsPerSentence,
+  );
+
+  const expectedActions = density.actionsPerSentence * mix.intensity;
+  const actionSlotsInTemplate = template.slots.filter(
+    (s) => s === 'action' || s === 'opener' || s === 'closer',
+  ).length;
+  const targetActions = jittered(
+    expectedActions,
+    density.jitter,
+    ctx.rng,
+    0,
+    Math.max(0, density.maxActionsPerSentence),
+  );
+
+  const clusterSizes = clusterSizesForSlots(template, totalSounds);
+  let soundIdx = 0;
+  let actionsEmitted = 0;
+  const parts: string[] = [];
+
+  for (const slot of template.slots) {
+    switch (slot satisfies Slot) {
+      case 'sound': {
+        const size = clusterSizes[soundIdx++] ?? 1;
+        const { cluster } = generateSoundCluster(size, mix, ctx, 'sounds');
+        parts.push(cluster);
+        break;
+      }
+      case 'opener': {
+        if (actionSlotsInTemplate > 0 && actionsEmitted < targetActions) {
+          const action = composeAction(
+            mix,
+            ctx.rng,
+            { verbs: ctx.buffers.verbs, verbObjects: ctx.buffers.verbObjects },
+            ctx.profile.grammars,
+          );
+          parts.push(action);
+          actionsEmitted++;
+        } else {
+          // Use an interjection sound as an opener fallback.
+          const { cluster } = generateSoundCluster(1, mix, ctx, 'interjections');
+          parts.push(cluster);
+        }
+        break;
+      }
+      case 'action':
+      case 'closer': {
+        if (actionsEmitted < targetActions) {
+          const action = composeAction(
+            mix,
+            ctx.rng,
+            { verbs: ctx.buffers.verbs, verbObjects: ctx.buffers.verbObjects },
+            ctx.profile.grammars,
+          );
+          parts.push(action);
+          actionsEmitted++;
+        }
+        break;
+      }
+    }
+  }
+
+  // Soft easter-egg tag: prepend an ears-perk opener if the template
+  // didn't already place an action at the front.
+  if (wantsEarsPerk && !hasOpenerAction(parts)) {
+    parts.unshift('*ears perk up*');
+  }
+
+  // Punctuation + caps preservation from the source sentence.
+  const punct = trailingPunctuation(trimmed);
+  if (punct === '!') {
+    appendPunctuationToLastSound(parts, '!');
+    uppercaseLastCluster(parts);
+  } else if (punct === '?') {
+    appendPunctuationToLastSound(parts, '?');
+    if (!parts.some((p) => p.startsWith('*') && /tilt|cock|head/.test(p))) {
+      // Add a head-tilt action only if we haven't already and there's room.
+      if (actionsEmitted < density.maxActionsPerSentence) {
+        const tilt = composeAction(
+          { weights: { ...mix.weights, curious: 1, neutral: 0, highPositive: 0, lowPositive: 0, highNegative: 0, fear: 0, lowNegative: 0 }, intensity: mix.intensity },
+          ctx.rng,
+          { verbs: ctx.buffers.verbs, verbObjects: ctx.buffers.verbObjects },
+          ctx.profile.grammars,
+        );
+        parts.push(tilt);
+      }
+    }
+  } else if (punct === '...') {
+    appendPunctuationToLastSound(parts, '...');
+  } else if (punct === '.') {
+    // Soft trailing punctuation; only add if we don't end with an action.
+    const last = parts[parts.length - 1];
+    if (last && !last.startsWith('*') && !/[.!?]$/.test(last)) {
+      appendPunctuationToLastSound(parts, '.');
+    }
+  }
+
+  let out = parts.filter((p) => p.length > 0).join(' ');
+
+  if (isAllUppercase(trimmed)) {
+    // Uppercase all sound tokens but leave action *...* phrases lowercase
+    // so they read naturally.
+    out = out
+      .split(' ')
+      .map((tok) => (tok.startsWith('*') ? tok : tok.toUpperCase()))
+      .join(' ');
+  }
+
+  return out;
+}

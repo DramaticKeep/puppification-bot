@@ -1,0 +1,51 @@
+{
+  "name": "puppifier",
+  "version": "0.1.0",
+  "description": "Translate English text into humorous dog-speech (sounds + action phrases) driven by per-sentence GoEmotions tones.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "example": "node --import tsx examples/basic.ts",
+    "test": "mocha",
+    "test:integration": "mocha --config .mocharc.integration.json",
+    "test:all": "npm test && npm run test:integration"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "nlp",
+    "emotion",
+    "tone",
+    "humor",
+    "dog",
+    "puppy",
+    "translation"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "emotion-classifier": "file:../emotion-classifier"
+  },
+  "devDependencies": {
+    "@types/chai": "^5.2.3",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^25.6.0",
+    "chai": "^6.2.2",
+    "mocha": "^11.7.5",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3"
+  }
+}
