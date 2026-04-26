@@ -4,6 +4,7 @@ import {
   registerCommandsForGuild,
 } from '../src/commands/register.js';
 import { loadConfig } from '../src/config.js';
+import { ChannelExemptionStore } from '../src/state/channelExemptions.js';
 import { PuppificationStore } from '../src/state/puppificationStore.js';
 
 /**
@@ -30,7 +31,8 @@ async function main(): Promise<void> {
     process.exit(2);
   }
   const store = new PuppificationStore();
-  const commands = buildCommands(store).map((c) => c.data);
+  const exemptions = new ChannelExemptionStore();
+  const commands = buildCommands({ store, exemptions }).map((c) => c.data);
   const rest = makeRest(config.discordToken);
   await registerCommandsForGuild(
     rest,

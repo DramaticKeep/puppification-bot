@@ -12,6 +12,7 @@ import { attachInteractionHandler } from './handlers/interactionCreate.js';
 import { attachMessageHandler } from './handlers/messageCreate.js';
 import { warmUpPuppifier } from './pipeline/puppifierPipeline.js';
 import { loadConfig, type Config } from './config.js';
+import { ChannelExemptionStore } from './state/channelExemptions.js';
 import {
   PuppificationStore,
   type Entry,
@@ -29,9 +30,10 @@ async function main(): Promise<void> {
   const client = createClient();
 
   const store = new PuppificationStore();
+  const exemptions = new ChannelExemptionStore();
   const webhooks = new WebhookManager(client);
 
-  const commands = buildCommands(store);
+  const commands = buildCommands({ store, exemptions });
   const commandsJson: CommandJson[] = commands.map((c) => c.data);
   const rest = makeRest(config.discordToken);
 
@@ -66,7 +68,7 @@ async function main(): Promise<void> {
 
   const commandMap = buildCommandMap(commands);
   attachInteractionHandler(client, commandMap);
-  attachMessageHandler({ client, store, webhooks });
+  attachMessageHandler({ client, store, exemptions, webhooks });
 
   // Slash command registration is per-guild only:
   //
@@ -130,6 +132,7 @@ async function main(): Promise<void> {
   setupShutdown(async () => {
     logger.info('Shutting down...');
     store.clear();
+    exemptions.clear();
     client.destroy();
   });
 

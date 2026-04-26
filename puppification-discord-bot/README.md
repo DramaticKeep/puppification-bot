@@ -12,6 +12,8 @@ When a user is "puppified", the bot:
 
 - `/puppify user:<User> [minutes:<1-1440>]` — puppify a user for a given duration (default 10 minutes). Mod-only (`Manage Messages`).
 - `/unpuppify user:<User>` — stop puppifying a user. Mod-only.
+- `/exempt-channel [channel:<#channel>]` — mark a channel as off-limits; the bot will leave every message in it (and all of its threads) untouched, even from currently-puppified users. Defaults to the channel the command is run in. Mod-only.
+- `/unexempt-channel [channel:<#channel>]` — undo a previous exemption. Mod-only.
 - Mandatory model warm-up at startup so the first puppified message doesn't pay the model-load cost.
 - Per-user FIFO message queue: same-user messages stay in submission order, different users process concurrently.
 - Per-user `Puppifier` instance with its own RNG and recent-use buffers (the GoEmotions model itself is shared via the singleton inside `emotion-classifier`).
@@ -105,9 +107,10 @@ src/
   config.ts                      env validation
   client.ts                      discord.js client + intents
   state/puppificationStore.ts    Map<guild:user, Entry>; per-user Puppifier + UserInfo with TTL
+  state/channelExemptions.ts     per-guild Set<channelId> of opted-out channels
   pipeline/puppifierPipeline.ts  mandatory startup model warm-up
   pipeline/userQueue.ts          per-key FIFO promise chain
-  commands/                      /puppify, /unpuppify slash commands (mod-only)
+  commands/                      /puppify, /unpuppify, /exempt-channel, /unexempt-channel (mod-only)
   handlers/interactionCreate.ts  slash command dispatcher
   handlers/messageCreate.ts      message -> stale check -> queue -> classify -> relay
   discord/displayName.ts         `Puppy <name> 🐶` transform + sanitation

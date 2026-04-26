@@ -3,6 +3,7 @@ import { buildUserInfo } from '../discord/displayName.js';
 import { relayPuppifiedMessage } from '../discord/relayMessage.js';
 import type { WebhookManager } from '../discord/webhookManager.js';
 import { enqueue } from '../pipeline/userQueue.js';
+import type { ChannelExemptionStore } from '../state/channelExemptions.js';
 import {
   USER_INFO_TTL_MS,
   type Entry,
@@ -14,6 +15,7 @@ import { logger } from '../util/logger.js';
 export interface MessageCreateHandlerOptions {
   client: Client;
   store: PuppificationStore;
+  exemptions: ChannelExemptionStore;
   webhooks: WebhookManager;
 }
 
@@ -35,16 +37,17 @@ export interface MessageCreateHandlerOptions {
 export function attachMessageHandler(
   options: MessageCreateHandlerOptions,
 ): void {
-  const { client, store, webhooks } = options;
+  const { client, store, exemptions, webhooks } = options;
 
   client.on('messageCreate', (message: Message) => {
-    void handle(message, store, webhooks);
+    void handle(message, store, exemptions, webhooks);
   });
 }
 
 async function handle(
   message: Message,
   store: PuppificationStore,
+  exemptions: ChannelExemptionStore,
   webhooks: WebhookManager,
 ): Promise<void> {
   // Ignore DMs (per-guild scope).
@@ -58,6 +61,17 @@ async function handle(
   // Ignore the bot's own non-webhook messages (e.g. its slash command
   // replies / expiry announcements).
   if (message.author.id === message.client.user.id) return;
+
+  // Channel exemptions: skip puppification entirely if this channel
+  // (or its parent, for threads) was exempted via /exempt-channel.
+  // Checked before the store lookup so even puppified users are
+  // unaffected here.
+  const channel = message.channel;
+  const parentId =
+    'parentId' in channel ? (channel.parentId ?? null) : null;
+  if (exemptions.is(message.guildId, message.channelId, parentId)) {
+    return;
+  }
 
   const entry = store.get(message.guildId, message.author.id);
   if (!entry) return;
