@@ -99,6 +99,57 @@ To stop early:
 
 When the timer expires, the bot announces `@nikita is no longer puppified.` in the channel where `/puppify` was originally invoked.
 
+## Deploy to Fly.io
+
+The repo root ships a `Dockerfile`, `.dockerignore`, and `fly.toml` configured for a single always-on Fly machine with a persistent volume for the GoEmotions model cache. All `fly` commands are run from the repo root (`/path/to/puppification-bot`), not from this package directory.
+
+### Why these choices
+
+- **Single instance.** All bot state (`PuppificationStore`, `ChannelExemptionStore`, per-channel webhook cache, per-user FIFO queues) lives in memory. Two replicas sharing the same Discord token would double-handle every gateway event, so we pin the deploy to exactly one machine.
+- **Persistent volume for the model.** Without it, every deploy would re-download the ~80 MB ONNX model. The volume is mounted at `/data` and `HF_HOME=/data/hf` points the Hugging Face cache there.
+- **No `[http_service]`.** The bot is an outbound-only WS client; there's nothing to listen on.
+- **Debian base image, not Alpine.** `onnxruntime-node` only ships glibc prebuilt binaries.
+- **Deploy strategy `immediate`.** A volume can only be attached to one machine at a time, so rolling deploys can't overlap.
+
+### One-time setup
+
+```bash
+brew install flyctl                     # or platform equivalent
+fly auth login
+
+cd /path/to/puppification-bot           # repo root, not this package
+
+fly apps create puppification-bot       # pick a unique name; update fly.toml if you rename
+fly volumes create hf_cache --region iad --size 1
+fly secrets set DISCORD_TOKEN=...your-bot-token... CLIENT_ID=...your-app-id...
+fly scale count 1                       # belt-and-braces single-instance guarantee
+```
+
+Notes:
+
+- Do **not** set `GUILD_ID` in production. The bot auto-registers slash commands per-guild on startup and on every `guildCreate`. `GUILD_ID` is a dev-only override that scopes registration to a single guild.
+- The volume must live in the same region as the machine (`iad` here, matching `primary_region` in `fly.toml`).
+- `fly secrets set` triggers an automatic redeploy; the first one will fail because no image exists yet — that's expected. Just run `fly deploy` next.
+
+### Deploy
+
+```bash
+fly deploy
+```
+
+The first deploy takes ~2–3 minutes (image build + push). On boot the bot spends another ~30–60 s warming the classifier (downloading the model into `/data/hf`). Subsequent deploys reuse the volume so warm-up is a few seconds.
+
+### Day 2
+
+```bash
+fly logs                                # live stdout (the bot's logger writes here)
+fly ssh console                         # one-shot shell into the running container
+fly secrets set DISCORD_TOKEN=newtoken  # rotate token; auto-redeploys
+fly status                              # machine + volume state
+```
+
+Restarts (deploys, OOM kills, manual `fly machine restart`) clear all active puppifications and the per-channel webhook cache. This is by design — see "Known limitations" below.
+
 ## Architecture
 
 ```

@@ -1,0 +1,45 @@
+# Build artifacts and installed deps - rebuilt inside the image.
+**/node_modules
+**/dist
+
+# Local caches (HF model cache, tsbuildinfo, etc.).
+**/.cache
+**/.tsbuildinfo
+
+# Logs.
+**/*.log
+
+# OS / editor noise.
+.DS_Store
+**/.DS_Store
+.vscode
+**/.vscode
+.idea
+**/.idea
+
+# Local env files - secrets are injected via `fly secrets`.
+.env
+.env.*
+**/.env
+**/.env.*
+
+# VCS / Cursor / agent metadata (none of this should ship in the image).
+.git
+.gitignore
+.cursor
+**/.cursor
+
+# Tests / dev-only scaffolding don't need to be in the build context.
+**/tests
+**/test
+**/coverage
+**/.mocharc*
+
+# This file and the deploy descriptors themselves don't need to be copied in.
+.dockerignore
+Dockerfile
+fly.toml
+
+# Repo-level docs / license aren't needed inside the runtime image.
+README.md
+LICENSE
