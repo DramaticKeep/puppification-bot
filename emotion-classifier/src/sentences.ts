@@ -35,10 +35,12 @@ const ABBREVIATIONS = new Set([
 const SPLIT_CANDIDATE = /([.!?]+)(["'\u201D\u2019)\]]*)(\s+)/g;
 
 /**
- * Characters that can validly start a new sentence (uppercase letter, digit,
+ * Characters that can validly start a new sentence (letter, digit,
  * or an opening quote/bracket).
  */
-const SENTENCE_STARTER = /[A-Z0-9"'\u201C\u2018(\[]/;
+//const SENTENCE_STARTER = /[A-Z0-9"'\u201C\u2018(\[]/;
+
+const LOWER_CASE_CHARS = /[a-z]/;
 
 /**
  * Split a phrase into sentences using a dependency-free heuristic.
@@ -73,7 +75,8 @@ export function splitSentences(text: string): string[] {
 
     const nextChar = trimmed.charAt(nextStart);
     if (!nextChar) break;
-    if (!SENTENCE_STARTER.test(nextChar)) continue;
+    // Ignore end of sentence if matching [punctuation][quote] lowercase, e.g. 'she said "hi!" yesterday'
+    if (closers.length === 1 && LOWER_CASE_CHARS.test(nextChar)) continue;
 
     // Abbreviation guard: only relevant when the terminator is a single
     // period (runs like `...`, `!?`, `!!` are real sentence ends).
