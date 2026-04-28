@@ -38,7 +38,8 @@ const SPLIT_CANDIDATE = /([.!?]+)(["'\u201D\u2019)\]]*)(\s+)/g;
  * Characters that can validly start a new sentence (letter, digit,
  * or an opening quote/bracket).
  */
-const SENTENCE_STARTER = /[A-Z0-9"'\u201C\u2018(\[]/;
+//const SENTENCE_STARTER = /[A-Z0-9"'\u201C\u2018(\[]/;
+
 const LOWER_CASE_CHARS = /[a-z]/;
 
 /**
