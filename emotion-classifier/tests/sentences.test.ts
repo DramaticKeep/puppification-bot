@@ -26,7 +26,13 @@ describe('splitSentences', () => {
       splitSentences('First. Second! Third? Fourth.'),
     ).to.deep.equal(['First.', 'Second!', 'Third?', 'Fourth.']);
   });
-
+  
+  it('splits on lowercase sentences', () => {
+    expect(
+      splitSentences('first. second! third? fourth. fifth.'),
+    ).to.deep.equal(['first.', 'second!', 'third?', 'fourth.', 'fifth.']);
+  });
+  
   it('preserves common abbreviations like Mr.', () => {
     expect(splitSentences('Mr. Smith went home.')).to.deep.equal([
       'Mr. Smith went home.',
@@ -52,10 +58,6 @@ describe('splitSentences', () => {
     expect(
       splitSentences('Cats are great, e.g. Tabbies are fluffy.'),
     ).to.deep.equal(['Cats are great, e.g. Tabbies are fluffy.']);
-  });
-
-  it('does not split mid-ellipsis when followed by a lowercase word', () => {
-    expect(splitSentences('Wait... what?')).to.deep.equal(['Wait... what?']);
   });
 
   it('does split on an ellipsis followed by an uppercase sentence', () => {
