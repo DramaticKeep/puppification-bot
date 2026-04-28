@@ -88,7 +88,13 @@ export function splitSentences(text: string): string[] {
       }
     }
 
-    sentences.push(trimmed.substring(start, sentenceEnd).trim());
+    // preserve newlines
+    let sentence = trimmed.substring(start, sentenceEnd).trim();
+    if (ws.includes('\n')) {
+      sentence += '\n';
+    }
+
+    sentences.push(sentence);
     start = nextStart;
   }
 

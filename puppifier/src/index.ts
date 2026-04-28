@@ -76,7 +76,9 @@ function renderClassification(
     dog: translateSentence(s.text, s.tone, ctx),
   }));
   return {
-    text: sentences.map((s) => s.dog).join(' ').trim(),
+    text: sentences.map((s) =>
+      s.dog.charAt(s.dog.length - 1) === "\n" ? s.dog : s.dog + '  '
+    ).join('').trim(),
     source: classification.phrase.text,
     phraseTone: classification.phrase.tone,
     sentences,

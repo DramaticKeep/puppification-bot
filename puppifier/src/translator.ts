@@ -199,11 +199,16 @@ export function translateSentence(
   const trimmed = sentence.trim();
   if (trimmed.length === 0) return '';
 
+  let addNewLine = false;
+  if (sentence.charAt(sentence.length-1) === "\n") {
+    addNewLine = true;
+  }
+
   const mix = blendTones(tone);
 
   const override = findOverride(trimmed);
   if (override?.render) {
-    return override.render({ rng: ctx.rng, mix });
+    return override.render({ rng: ctx.rng, mix }) + (addNewLine ? '\n' : '');
   }
 
   const tags = findTags(trimmed);
@@ -366,5 +371,5 @@ export function translateSentence(
     );
   }
 
-  return finalParts.join(' ');
+  return finalParts.join(' ') + (addNewLine ? '\n' : '');
 }
