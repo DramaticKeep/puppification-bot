@@ -74,10 +74,8 @@ export function splitSentences(text: string): string[] {
 
     const nextChar = trimmed.charAt(nextStart);
     if (!nextChar) break;
-    if ( 
-      !SENTENCE_STARTER.test(nextChar) && 
-      (closers.includes('"') && LOWER_CASE_CHARS.test(nextChar))
-    ) continue;
+    // Ignore end of sentence if matching [punctuation][quote] lowercase, e.g. 'she said "hi!" yesterday'
+    if (closers.length === 1 && LOWER_CASE_CHARS.test(nextChar)) continue;
 
     // Abbreviation guard: only relevant when the terminator is a single
     // period (runs like `...`, `!?`, `!!` are real sentence ends).
