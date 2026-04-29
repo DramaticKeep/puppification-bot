@@ -1,4 +1,6 @@
 import { defaultProfile, Puppifier } from 'puppifier';
+import { saveStore, loadStore } from './saveState.js';
+import { logger } from '../util/logger.js';
 
 /**
  * Cached identity used when relaying a puppified message via webhook.
@@ -47,6 +49,7 @@ export interface Entry {
    * Cleared once the refresh resolves (or rejects).
    */
   refreshPromise?: Promise<UserInfo> | undefined;
+  toJSON: () => object;
 }
 
 /**
@@ -83,6 +86,10 @@ export interface PuppifyParams {
 export class PuppificationStore {
   private readonly entries = new Map<string, Entry>();
   private onExpire: ExpiryHandler | undefined;
+
+  constructor() {
+    this.load();
+  }
 
   /**
    * Register the callback that fires when an entry auto-expires (timer
@@ -129,8 +136,20 @@ export class PuppificationStore {
       puppifier: new Puppifier({ profile }),
       userInfo: params.userInfo,
       refreshPromise: undefined,
+      toJSON: function () {
+        return {
+          guildId: this.guildId,
+          userId: this.userId,
+          expiresAt: this.expiresAt,
+          announceChannelId: this.announceChannelId,
+          puppifier: this.puppifier,
+          userInfo: this.userInfo,
+          refreshPromise: this.refreshPromise,
+        }
+      },
     };
     this.entries.set(key, entry);
+    this.save();
     return entry;
   }
 
@@ -144,7 +163,12 @@ export class PuppificationStore {
     if (!entry) return undefined;
     clearTimeout(entry.timer);
     this.entries.delete(key);
+    this.save();
     return entry;
+  }
+
+  private save(): void {
+    saveStore("puppied", Object.fromEntries(this.entries));
   }
 
   /** Clear all entries and their timers. Useful for shutdown / tests. */
@@ -153,6 +177,7 @@ export class PuppificationStore {
       clearTimeout(entry.timer);
     }
     this.entries.clear();
+    this.save();
   }
 
   /** Number of active puppifications. Mostly for tests / metrics. */
@@ -172,5 +197,44 @@ export class PuppificationStore {
         // Swallow: the handler is responsible for its own logging. We
         // don't want a thrown handler to crash the timer thread.
       });
+  }
+
+  private async load(): Promise<void> {
+    const entryTypeguard = (entry: unknown): entry is Entry => {
+      return (
+        typeof entry === 'object'
+        && entry !== null
+        && "guildId" in entry
+        && "userId" in entry
+        && "expiresAt" in entry
+        && typeof entry.expiresAt === "number"
+      )
+    } 
+    try {
+      const state = await loadStore("puppied");
+      let count = 0;
+      console.debug("save state", state)
+      for (const [key, entry] of Object.entries(state)) {
+        // validate entry
+        if (!entryTypeguard(entry)) { continue; }
+
+        if (entry.expiresAt - Date.now() < 0) { 
+          continue; 
+        }
+        let pupParams: PuppifyParams = {
+          guildId: entry.guildId,
+          userId: entry.userId,
+          durationMs: entry.expiresAt - Date.now(),
+          announceChannelId: entry.announceChannelId,
+          userInfo: entry.userInfo,
+        }
+        this.puppify(pupParams);
+
+        count++;
+      }
+      logger.info("Loaded", count, "puppifications");
+    } catch (error) {
+      logger.error('Failed to load state:', error);
+    }
   }
 }
