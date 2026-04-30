@@ -63,8 +63,20 @@ async function loadState() {
         return JSON.parse(data);
     } catch (e: any) {
         if (e?.code === 'ENOENT') {
-            // File not found, create
+            // File not found, try to create it
+            const dir = dirname(STATE_FILE_PATH);
+            try {
+                if (!existsSync(dir)) {
+                    mkdirSync(dir, { recursive: true });
+                }
+            } catch(e: any) {
+                if (e?.code === 'EACCES') {
+                    logger.error("Save folder is not writeable! " + dir);
+                }
+                throw e;
+            }
             writeFileSync(STATE_FILE_PATH, JSON.stringify({}, null, 2));
+            logger.info("Created new save data at " + STATE_FILE_PATH);
             return {};
         } else {
             logger.error(e);
