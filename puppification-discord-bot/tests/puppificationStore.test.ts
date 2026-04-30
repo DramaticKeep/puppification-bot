@@ -114,14 +114,14 @@ describe('PuppificationStore', () => {
     });
     store.puppify({
       guildId: 'g',
-      userId: 'u1',
+      userId: 'u',
       durationMs: 20,
       announceChannelId: 'c',
       userInfo: fakeUserInfo(),
     });
     await tick(60);
-    expect(expired?.userId).to.equal('u1');
-    expect(store.has('g', 'u1')).to.equal(false);
+    expect(expired?.userId).to.equal('u');
+    expect(store.has('g', 'u')).to.equal(false);
   });
 
   it('does NOT fire onExpire for a manual unpuppify', async () => {
@@ -132,12 +132,12 @@ describe('PuppificationStore', () => {
     });
     store.puppify({
       guildId: 'g',
-      userId: 'u2',
+      userId: 'u',
       durationMs: 50,
       announceChannelId: 'c',
       userInfo: fakeUserInfo(),
     });
-    store.unpuppify('g', 'u2');
+    store.unpuppify('g', 'u');
     await tick(80);
     expect(expired).to.equal(false);
   });
@@ -150,14 +150,14 @@ describe('PuppificationStore', () => {
     });
     store.puppify({
       guildId: 'g',
-      userId: 'u3',
+      userId: 'u1',
       durationMs: 30,
       announceChannelId: 'c',
       userInfo: fakeUserInfo(),
     });
     store.puppify({
       guildId: 'g',
-      userId: 'u4',
+      userId: 'u2',
       durationMs: 30,
       announceChannelId: 'c',
       userInfo: fakeUserInfo(),
