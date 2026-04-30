@@ -45,8 +45,15 @@ async function getDogUrls(): Promise<string[]> {
     if (result.status !== "success") {
       logger.error(`Dog API Response status: ${result.status}`);
     }
-    logger.info("Loaded dog URLs.");
-    return result.message as string[];
+    
+    const imgUrls = result.message as string[];
+    if (imgUrls.length <= 0) {
+      logger.warn("Dog URLs array was empty.");
+    }
+    else {
+      logger.info("Loaded "+imgUrls.length+" dog URLs.");
+    }
+    return imgUrls;
   } catch (error) {
     logger.error('Error from Dog API: ' + (error as Error).message);
   }
