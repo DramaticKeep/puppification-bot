@@ -115,6 +115,26 @@ export class PuppificationStore {
    * Puppifier, and arms a new auto-expiry timer.
    */
   puppify(params: PuppifyParams): Entry {
+    let entry = this.addPuppy(params);
+    this.save();
+    return entry;
+  }
+
+  /**
+   * Stop puppification (no-op if not active). Returns the removed
+   * entry, if any. Does NOT trigger the onExpire callback.
+   */
+  unpuppify(guildId: string, userId: string): Entry | undefined {
+    const key = makeKey(guildId, userId);
+    const entry = this.entries.get(key);
+    if (!entry) return undefined;
+    clearTimeout(entry.timer);
+    this.entries.delete(key);
+    this.save();
+    return entry;
+  }
+
+  private addPuppy(params: PuppifyParams): Entry {
     const key = makeKey(params.guildId, params.userId);
     const existing = this.entries.get(key);
     if (existing) {
@@ -142,28 +162,11 @@ export class PuppificationStore {
           userId: this.userId,
           expiresAt: this.expiresAt,
           announceChannelId: this.announceChannelId,
-          puppifier: this.puppifier,
           userInfo: this.userInfo,
-          refreshPromise: this.refreshPromise,
         }
       },
     };
     this.entries.set(key, entry);
-    this.save();
-    return entry;
-  }
-
-  /**
-   * Stop puppification (no-op if not active). Returns the removed
-   * entry, if any. Does NOT trigger the onExpire callback.
-   */
-  unpuppify(guildId: string, userId: string): Entry | undefined {
-    const key = makeKey(guildId, userId);
-    const entry = this.entries.get(key);
-    if (!entry) return undefined;
-    clearTimeout(entry.timer);
-    this.entries.delete(key);
-    this.save();
     return entry;
   }
 
@@ -197,10 +200,18 @@ export class PuppificationStore {
         // Swallow: the handler is responsible for its own logging. We
         // don't want a thrown handler to crash the timer thread.
       });
+    this.save();
   }
 
   private async load(): Promise<void> {
-    const entryTypeguard = (entry: unknown): entry is Entry => {
+    type entryJson = {
+          guildId: string,
+          userId: string,
+          expiresAt: number,
+          announceChannelId: string,
+          userInfo: UserInfo,
+        }
+    const entryTypeguard = (entry: unknown): entry is entryJson => {
       return (
         typeof entry === 'object'
         && entry !== null
@@ -213,7 +224,6 @@ export class PuppificationStore {
     try {
       const state = await loadStore("puppied");
       let count = 0;
-      console.debug("save state", state)
       for (const [key, entry] of Object.entries(state)) {
         // validate entry
         if (!entryTypeguard(entry)) { continue; }
@@ -228,7 +238,7 @@ export class PuppificationStore {
           announceChannelId: entry.announceChannelId,
           userInfo: entry.userInfo,
         }
-        this.puppify(pupParams);
+        this.addPuppy(pupParams);
 
         count++;
       }
