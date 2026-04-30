@@ -50,7 +50,13 @@ async function saveState(data: unknown) {
     if (!existsSync(dir)) {
         mkdirSync(dir, { recursive: true });
     }
-    writeFileSync(STATE_FILE_PATH, JSON.stringify(data, null, 2));
+    try {
+        writeFileSync(STATE_FILE_PATH, JSON.stringify(data, null, 2));
+    } catch (e: any) {
+        logger.error("Error saving state: ");
+        logger.error(e);
+        throw e;
+    }
 }
 
 async function loadState() {
