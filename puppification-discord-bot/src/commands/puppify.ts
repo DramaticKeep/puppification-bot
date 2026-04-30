@@ -105,5 +105,6 @@ async function handlePuppify(
   await interaction.reply({
     content: `🐶 <@${targetUser.id}> has been puppified for ${formatMinutes(minutes)}!`,
     allowedMentions: { parse: [] },
+    flags: [MessageFlags.SuppressNotifications],
   });
 }

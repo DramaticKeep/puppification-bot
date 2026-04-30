@@ -48,6 +48,7 @@ async function handleUnpuppify(
     await interaction.reply({
       content: `<@${targetUser.id}> isn't currently puppified.`,
       allowedMentions: { parse: [] },
+      flags: [MessageFlags.SuppressNotifications],
     });
     return;
   }
@@ -55,5 +56,6 @@ async function handleUnpuppify(
   await interaction.reply({
     content: `<@${targetUser.id}> is no longer puppified.`,
     allowedMentions: { parse: [] },
+    flags: [MessageFlags.SuppressNotifications],
   });
 }
