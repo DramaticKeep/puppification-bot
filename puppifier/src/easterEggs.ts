@@ -75,19 +75,32 @@ export const EASTER_EGGS: EasterEgg[] = [
     render: () => `*imitates a cat*`,
   },
   {
+    id: 'walk-treat-ball-park',
+    match: /\b(?:walk|walkies|treat|treats|ball|park|fetch)\b/,
+    kind: 'tag',
+    tag: 'earsPerk',
+  },
+  {
+    id: 'aroo-literal',
+    match: /\barooo+\b/,
+    kind: 'override',
+    render: () => `Arooooooo!`,
+  },
+  {
+    id: 'awoo-literal',
+    match: /\bawooo+\b/,
+    kind: 'override',
+    render: () => `Awooooooo!`,
+  },
+  {
     id: 'aroo-long-word',
     match: /\b(?:[a-z]{15,})\b/,
     kind: 'override',
     render: ({ rng }) => {
       const numOs = rng.int(5,25);
-      return `Ar${'o'.repeat(numOs)}!`;
+      const awoOrAro = pickOne(['w', 'r'], rng);
+      return `A${awoOrAro}${'o'.repeat(numOs)}!`;
     },
-  },
-  {
-    id: 'walk-treat-ball-park',
-    match: /\b(?:walk|walkies|treat|treats|ball|park|fetch)\b/,
-    kind: 'tag',
-    tag: 'earsPerk',
   },
 ];
 
