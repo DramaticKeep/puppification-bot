@@ -5,6 +5,7 @@ import type { PaletteMix } from './tone.js';
 export interface EasterEggContext {
   rng: Random;
   mix: PaletteMix;
+  matches?: string[] | null;
 }
 
 /**
@@ -20,16 +21,19 @@ export interface EasterEgg {
   id: string;
   /** String substring or RegExp matched against the normalized sentence. */
   match: string | RegExp;
-  kind: 'override' | 'tag';
+  kind: 'override' | 'tag' | 'replaceWord';
   /** Required when kind === 'override'. */
   render?: (ctx: EasterEggContext) => string;
   /** Required when kind === 'tag'. The translator interprets this. */
   tag?: 'earsPerk';
+  matches?: string[] | null;
+  grammar?: "default"| "action";
 }
 
 function pickOne<T>(items: readonly T[], rng: Random): T {
   return rng.pick(items);
 }
+
 
 /**
  * Ordered list of easter eggs. Earlier entries take precedence on first
@@ -45,6 +49,7 @@ export const EASTER_EGGS: EasterEgg[] = [
       const soft = pickOne(['mrrf', 'hrmm', 'mrrrf', 'snrrf'], rng);
       return `${soft} *licks your face*`;
     },
+    grammar: "action",
   },
   {
     id: 'sorry',
@@ -73,6 +78,7 @@ export const EASTER_EGGS: EasterEgg[] = [
     match: /\b(?:meow|mrow)\b/,
     kind: 'override',
     render: () => `*imitates a cat*`,
+    grammar: "action",
   },
   {
     id: 'walk-treat-ball-park',
@@ -82,24 +88,111 @@ export const EASTER_EGGS: EasterEgg[] = [
   },
   {
     id: 'aroo-literal',
-    match: /\barooo+\b/,
+    match: /\bar(oo+)\b/,
     kind: 'override',
-    render: () => `Arooooooo!`,
+    render: ({ matches }) => `Ar${matches?.[1] ?? 'oo'}!`,
   },
   {
     id: 'awoo-literal',
-    match: /\bawooo+\b/,
+    match: /\baw(oo+)\b/,
     kind: 'override',
-    render: () => `Awooooooo!`,
+    render: ({ matches }) => `Aw${matches?.[1] ?? 'oo'}!`,
   },
   {
     id: 'aroo-long-word',
-    match: /\b(?:[a-z]{15,})\b/,
+    match: /\b([a-z]{15,})\b/,
     kind: 'override',
-    render: ({ rng }) => {
+    render: ({ rng, matches }) => {
       const numOs = rng.int(5,25);
       const awoOrAro = pickOne(['w', 'r'], rng);
       return `A${awoOrAro}${'o'.repeat(numOs)}!`;
+    },
+  },
+
+  // Individual word replacements
+  {
+    id: 'love',
+    match: /^loves?$/, // Match start and end of string instead of word boundry
+    kind: 'replaceWord',
+    render: ({ rng, matches }) => {
+      return `*licks lovingly*`;
+    },
+    grammar: "action",
+  },
+  {
+    id: 'paw',
+    match: /^paws?$/,
+    kind: 'replaceWord',
+    render: ({ rng, matches }) => {
+      return `*holds out paw*`;
+    },
+    grammar: "action",
+  },
+  {
+    id: 'lick',
+    match: /^licks?$/,
+    kind: 'replaceWord',
+    render: ({ rng, matches }) => {
+      return `*licks*`;
+    },
+    grammar: "action",
+  },
+  {
+    id: 'wag',
+    match: /^wags?$/,
+    kind: 'replaceWord',
+    render: ({ rng, matches }) => {
+      return `*wags tail*`;
+    },
+    grammar: "action",
+  },
+  {
+    id: 'nuzzle',
+    match: /^(nuzzles?)|(nose)$/,
+    kind: 'replaceWord',
+    render: ({ rng, matches }) => {
+      return `*nuzzle*`;
+    },
+    grammar: "action",
+  },
+  {
+    id: 'emoji-replacement-happy',
+    match: /^(:3)|(:\))|(🙂)|😃$/,
+    kind: 'replaceWord',
+    render: ({ rng, matches }) => {
+      return rng.pick(["૮・ᴥ・ა", "🐶", "૮ฅ・ﻌ・აฅ", "🐕", "૮₍ • ᴥ • ₎ა"]);
+    },
+  },
+  {
+    id: 'emoji-replacement-excited',
+    match: /^(\^_\^)|😄$/,
+    kind: 'replaceWord',
+    render: ({ rng, matches }) => {
+      return rng.pick(["૮ ˆﻌˆ ა", "🐶", "૮ฅ ˆﻌˆ აฅ"]);
+    },
+  },
+  {
+    id: 'emoji-replacement-love',
+    match: /^🥰|(<3)|😘|❤$/,
+    kind: 'replaceWord',
+    render: ({ rng, matches }) => {
+      return rng.pick(["♡૮ฅ ˆﻌˆ აฅ"]);
+    },
+  },
+  {
+    id: 'emoji-replacement-sleepy',
+    match: /^😴$/,
+    kind: 'replaceWord',
+    render: ({ rng, matches }) => {
+      return rng.pick(["zᶻ ૮˶- ﻌ -˶ა⌒)ᦱ"]);
+    },
+  },
+  {
+    id: 'emoji-replacement-shock',
+    match: /^😮$/,
+    kind: 'replaceWord',
+    render: ({ rng, matches }) => {
+      return rng.pick(["૮₍ ˶°ㅁ° ₎ა !!"]);
     },
   },
 ];
@@ -120,7 +213,26 @@ export function findOverride(sentence: string): EasterEgg | undefined {
   const norm = normalize(sentence);
   for (const egg of EASTER_EGGS) {
     if (egg.kind !== 'override') continue;
-    if (testMatch(egg.match, norm)) return egg;
+    if (testMatch(egg.match, norm)) {
+      if (typeof egg.match !== 'string') {
+        egg.matches = egg.match.exec(norm);
+      }
+      return egg;
+    }
+  }
+  return undefined;
+}
+
+export function findWordReplacement(word: string): EasterEgg | undefined {
+  const norm = normalize(word);
+  for (const egg of EASTER_EGGS) {
+    if (egg.kind !== 'replaceWord') continue;
+    if (testMatch(egg.match, norm)) {
+      if (typeof egg.match !== 'string') {
+        egg.matches = egg.match.exec(norm);
+      }
+      return egg;
+    }
   }
   return undefined;
 }

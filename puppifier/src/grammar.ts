@@ -53,6 +53,35 @@ export const DEFAULT_ACTION_SHAPE: ActionShapeOptions = {
   includeModifiers: true,
 };
 
+/**
+ * List of plain puppy words to pass through, regexes will be handled elsewhere.
+ */
+export const puppyWords: Set<string> = new Set([
+  "arf",
+  "bau",
+  "baubau",
+  "borf",
+  "bowow",
+  "bowwow",
+  "rawr",
+  "sniff",
+  "yip",
+  "yap",
+  "🐶",
+  "🐕",
+  "🐩",
+]);
+
+export const puppyWordsRegex: RegExp[] = [
+  /^aro+$/,
+  /^awo+$/,
+  /^a(wa)+$/,
+  /^ar+u*f+$/,
+  /^a?woo+f$/,
+  /^grr+$/,
+  /^<\@\d{3,20}>$/, // preserve pings
+];
+
 const transitiveCommon: WeightedItem<string>[] = [
   { value: 'scratches', weight: 3 },
   { value: 'sniffs', weight: 3 },

@@ -1,6 +1,6 @@
 import type { ToneScore } from 'emotion-classifier';
-import { findOverride, findTags } from './easterEggs.js';
-import { blendActionProbability, composeAction } from './grammar.js';
+import { EasterEgg, findOverride, findTags, findWordReplacement } from './easterEggs.js';
+import { blendActionProbability, composeAction, puppyWords, puppyWordsRegex } from './grammar.js';
 import { morph } from './morphology.js';
 import type { Palette, SoundEntry } from './palettes.js';
 import type { Profile } from './profile.js';
@@ -33,9 +33,23 @@ export function makeRecentBuffers(profile: Profile): TranslateBuffers {
   };
 }
 
-function countWords(s: string): number {
-  const m = s.trim().match(/\S+/g);
-  return m ? m.length : 0;
+function isAllowedWord(word: string): boolean {
+  let testWord = word.toLowerCase();
+  if (puppyWords.has(testWord)) {
+    return true;
+  }
+  for (let r of puppyWordsRegex) {
+    if (r.test(testWord)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function getWords(s: string): string[] | null {
+  const m = s.trim().match(/(\S+)/g);
+  return m;
 }
 
 function endsWithEllipsis(s: string): boolean {
@@ -208,7 +222,7 @@ export function translateSentence(
 
   const override = findOverride(trimmed);
   if (override?.render) {
-    return override.render({ rng: ctx.rng, mix }) + (addNewLine ? '\n' : '');
+    return override.render({ rng: ctx.rng, mix, matches: override.matches }) + (addNewLine ? '\n' : '');
   }
 
   const tags = findTags(trimmed);
@@ -217,7 +231,9 @@ export function translateSentence(
   const template = pickTemplate(mix.intensity, ctx.rng, ctx.profile.templates);
   const density = ctx.profile.density;
 
-  const wordCount = countWords(trimmed);
+  const wordArray = getWords(trimmed);
+  if (!wordArray) { return ""; }
+  const wordCount = wordArray?.length;
   const expectedSounds = Math.max(
     1,
     wordCount * density.soundsPerWord + (mix.intensity > 0 ? 0 : 0),
@@ -257,59 +273,89 @@ export function translateSentence(
   let actionsEmitted = 0;
   const parts: string[] = [];
 
-  for (const slot of template.slots) {
-    switch (slot satisfies Slot) {
-      case 'sound': {
-        const size = clusterSizes[soundIdx++] ?? 1;
-        const { cluster } = generateSoundCluster(size, mix, ctx, 'sounds');
-        parts.push(cluster);
-        break;
-      }
-      case 'opener': {
-        if (
-          actionSlotsInTemplate > 0 &&
-          actionsEmitted < targetActions &&
-          tryEmitAction()
-        ) {
-          const action = composeAction(
-            mix,
-            ctx.rng,
-            { verbs: ctx.buffers.verbs, verbObjects: ctx.buffers.verbObjects },
-            ctx.profile.grammars,
-            ctx.profile.actionShape,
-          );
-          parts.push(action);
-          actionsEmitted++;
-        } else {
-          // No action slot, exhausted, or gated out: open with an
-          // interjection sound so the sentence still has shape.
-          const { cluster } = generateSoundCluster(1, mix, ctx, 'interjections');
-          parts.push(cluster);
-        }
-        break;
-      }
-      case 'action':
-      case 'closer': {
-        if (actionsEmitted < targetActions && tryEmitAction()) {
-          const action = composeAction(
-            mix,
-            ctx.rng,
-            { verbs: ctx.buffers.verbs, verbObjects: ctx.buffers.verbObjects },
-            ctx.profile.grammars,
-            ctx.profile.actionShape,
-          );
-          parts.push(action);
-          actionsEmitted++;
-        }
-        break;
-      }
+  // for (const slot of template.slots) {
+  //   switch (slot satisfies Slot) {
+  //     case 'sound': {
+  //       const size = clusterSizes[soundIdx++] ?? 1;
+  //       const { cluster } = generateSoundCluster(size, mix, ctx, 'sounds');
+  //       parts.push(cluster);
+  //       break;
+  //     }
+  //     case 'opener': {
+  //       if (
+  //         actionSlotsInTemplate > 0 &&
+  //         actionsEmitted < targetActions &&
+  //         tryEmitAction()
+  //       ) {
+  //         const action = composeAction(
+  //           mix,
+  //           ctx.rng,
+  //           { verbs: ctx.buffers.verbs, verbObjects: ctx.buffers.verbObjects },
+  //           ctx.profile.grammars,
+  //           ctx.profile.actionShape,
+  //         );
+  //         parts.push(action);
+  //         actionsEmitted++;
+  //       } else {
+  //         // No action slot, exhausted, or gated out: open with an
+  //         // interjection sound so the sentence still has shape.
+  //         const { cluster } = generateSoundCluster(1, mix, ctx, 'interjections');
+  //         parts.push(cluster);
+  //       }
+  //       break;
+  //     }
+  //     case 'action':
+  //     case 'closer': {
+  //       if (actionsEmitted < targetActions && tryEmitAction()) {
+  //         const action = composeAction(
+  //           mix,
+  //           ctx.rng,
+  //           { verbs: ctx.buffers.verbs, verbObjects: ctx.buffers.verbObjects },
+  //           ctx.profile.grammars,
+  //           ctx.profile.actionShape,
+  //         );
+  //         parts.push(action);
+  //         actionsEmitted++;
+  //       }
+  //       break;
+  //     }
+  //   }
+  // }
+
+  for (let word of wordArray) {
+    let wordReplace: EasterEgg | undefined = undefined;
+    if (isAllowedWord(word)) {
+      parts.push(word);
+
+      // Additional
+      let count = ctx.rng.pickWeighted([0,1,2], [10,8,1]);
+      const { cluster } = generateSoundCluster(count, mix, ctx, ctx.rng.pick(['interjections', 'sounds']));
+      parts.push(cluster);
+    }
+    else if (
+      (wordReplace = findWordReplacement(word)) 
+      && wordReplace?.render
+    ) {
+      parts.push(wordReplace.render({ rng: ctx.rng, mix, matches: wordReplace.matches }));
+    }
+    else {
+      let count = ctx.rng.pickWeighted([0,1,2], [1,3,2]);
+      const { cluster } = generateSoundCluster(count, mix, ctx, ctx.rng.pick(['interjections', 'sounds']));
+      parts.push(cluster);
     }
   }
 
-  // Soft easter-egg tag: prepend an ears-perk opener if the template
-  // didn't already place an action at the front.
-  if (wantsEarsPerk && !hasOpenerAction(parts)) {
-    parts.unshift('*ears perk up*');
+  // closer 
+  if (actionsEmitted < targetActions && tryEmitAction()) {
+    const action = composeAction(
+      mix,
+      ctx.rng,
+      { verbs: ctx.buffers.verbs, verbObjects: ctx.buffers.verbObjects },
+      ctx.profile.grammars,
+      ctx.profile.actionShape,
+    );
+    parts.push(action);
+    actionsEmitted++;
   }
 
   // Optionally force all `*...*` action phrases to trail the sounds.
@@ -324,6 +370,22 @@ export function translateSentence(
     parts.length = 0;
     parts.push(...sounds, ...actions);
   }
+
+  // Soft easter-egg tag: prepend an ears-perk opener if the template
+  // didn't already place an action at the front.
+  if (wantsEarsPerk && !hasOpenerAction(parts)) {
+    parts.unshift('*ears perk up*');
+  }
+
+  // Separate sequential actions with a comma
+  parts.forEach((part, idx) => {
+    if (idx >= parts.length - 1) {
+      return;
+    }
+    if (part.startsWith("*") && parts[idx+1]?.startsWith("*")) {
+      parts[idx] = parts[idx] + ",";
+    }
+  });
 
   // Punctuation + caps preservation from the source sentence.
   const punct = trailingPunctuation(trimmed);
