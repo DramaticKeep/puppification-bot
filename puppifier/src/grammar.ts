@@ -56,6 +56,8 @@ export const DEFAULT_ACTION_SHAPE: ActionShapeOptions = {
 /**
  * List of plain puppy words to pass through, regexes are below.
  * For replacement and advanced usage see EasterEggs.
+ * Words are typically skipped/out of order so only sounds 
+ * without a part of speech are recommended.
  */
 export const puppyWords: Set<string|RegExp> = new Set([
   "arf",
