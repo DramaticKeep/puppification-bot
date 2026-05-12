@@ -227,12 +227,19 @@ export function translateSentence(
   tone: readonly ToneScore[],
   ctx: TranslateContext,
 ): string {
-  const trimmed = sentence.trim();
+  let trimmed = sentence.trim();
   if (trimmed.length === 0) return '';
 
   let addNewLine = false;
   if (sentence.charAt(sentence.length-1) === "\n") {
     addNewLine = true;
+  }
+
+  // Hard cap length at 1000 chars, prevent going over discord max and 
+  // prevent long processing times. Preserving long messages isn't of much 
+  // benefit.
+  if (trimmed.length > 1000) {
+    trimmed = trimmed.substring(0, 1000);
   }
 
   const mix = blendTones(tone);
