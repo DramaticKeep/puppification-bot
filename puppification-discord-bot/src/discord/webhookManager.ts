@@ -57,7 +57,10 @@ export class WebhookManager {
     if (cached) return cached.webhook;
 
     const me = parent.guild.members.me;
-    if (!me) return null;
+    if (!me) {
+      logger.warn("Failed to obtain webhook for message: not part of guild.");
+      return null;
+    }
     const perms = parent.permissionsFor(me);
     if (!perms || !perms.has(PermissionFlagsBits.ManageWebhooks)) {
       logger.warn(
@@ -123,16 +126,21 @@ function resolveWebhookParent(
       logger.warn("No parent for channel", channel);
       return null;
     }
-    return parent as unknown as WebhookParent;
+    return parent as WebhookParent;
   }
-  if (
+  else if (
     channel.type === ChannelType.GuildText ||
     channel.type === ChannelType.GuildAnnouncement ||
     channel.type === ChannelType.GuildForum ||
     channel.type === ChannelType.GuildVoice
   ) {
-    return channel as unknown as WebhookParent;
+    return channel as WebhookParent;
   }
-  logger.debug("Unhandled channel type", channel);
-  return null;
+
+  // Use default resolver
+  logger.debug("Using default webhook resolver for unhandled channel type", channel);
+  if (channel.parent) {
+    return channel.parent as WebhookParent;
+  }
+  return channel as WebhookParent;
 }
